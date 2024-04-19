@@ -1,14 +1,24 @@
 # Script to read Olympus ETS files for virtual Microscopy
-# jeremy.deuel@usz.ch, 19 April 2024
-import http.server
-import socketserver
+# Copyright (C) 2024, Jeremy Deuel <jeremy.deuel@usz.ch>
+#     This program is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+#
+#     This program is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+#
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 from http import server
 import re
 import os
 from datetime import datetime
 import json
 from mimetypes import MimeTypes
-from typing import Callable
 import math
 import io
 from PIL import Image

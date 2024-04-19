@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <!-- remove these libraries in productive, they are already loaded in Cinderella -->
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+      <!-- endremove -->
+    <link rel="stylesheet" href="/viewer/leaflet/leaflet.css" />
+    <script src="/viewer/leaflet/leaflet-src.js"></script>
+    <style>
+    .leaflet-container {
+    background: #eee;
+    outline: 0;
+
+}
+    .fullscreen-icon {
+	background-image: url('icon-fullscreen.svg');
+	background-size: 26px 52px;
+}
+
+.fullscreen-icon.leaflet-fullscreen-on {
+	background-position: 0 -26px;
+}
+
+.leaflet-touch .fullscreen-icon {
+	background-position: 2px 2px;
+}
+
+.leaflet-touch .fullscreen-icon.leaflet-fullscreen-on {
+	background-position: 2px -24px;
+}
+
+/* Safari still needs this vendor-prefix: https://caniuse.com/mdn-css_selectors_fullscreen */
+/* stylelint-disable-next-line selector-no-vendor-prefix */
+.leaflet-container:-webkit-full-screen {
+	width: 100% !important;
+	height: 100% !important;
+	z-index: 99999;
+}
+
+.leaflet-container:fullscreen {
+	width: 100% !important;
+	height: 100% !important;
+	z-index: 99999;
+}
+
+.leaflet-pseudo-fullscreen {
+	position: fixed !important;
+	width: 100% !important;
+	height: 100% !important;
+	top: 0 !important;
+	left: 0 !important;
+	z-index: 99999;
+}
+
+/*Legend specific*/
+.legend {
+  padding: 6px 8px;
+  font: 14px Arial, Helvetica, sans-serif;
+  background: white;
+  background: rgba(255, 255, 255, 0.8);
+  /*box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);*/
+  /*border-radius: 5px;*/
+  line-height: 24px;
+  color: #555;
+}
+.legend h4 {
+  text-align: center;
+  font-size: 16px;
+  margin: 2px 12px 8px;
+  color: #777;
+}
+
+.legend span {
+  position: relative;
+  bottom: 3px;
+}
+
+.legend i {
+  width: 18px;
+  height: 18px;
+  float: left;
+  margin: 0 8px 0 0;
+  opacity: 0.7;
+}
+
+.legend i.icon {
+  background-size: 18px;
+  background-color: rgba(255, 255, 255, 1);
+}
+
+.cell-image {
+  width: 46px;
+  height: 46px;
+  border: 1px solid #0078A8;
+  padding: 0px;
+  margin: 1px;
+}
+
+.cell-image-container {
+  float: left;
+  border: 1px solid #0078A8;
+  background-color: #ccccff;
+  width: 500px;
+  min-height: 48px;
+  padding: 0;
+  margin: 0;
+}
+.container-active {
+  border: 1px solid #ff0000;
+  background: #ffaaaa;
+}
+.cell-popover-image {
+  width: 200px;
+  height: 200px;
+}
+
+  </style>
+    <script>
+      /*
+ * leaflet.fullscreen
+ * (c) Bruno B.; MIT License
+ * Uses fragments from the package 'screenfull'
+ */
+(function (root, factory) {
+	if (typeof define === 'function' && define.amd) {
+		// define an AMD module that requires 'leaflet'
+		// and resolve to an object containing leaflet
+		define('leafletFullScreen', ['leaflet'], factory);
+	} else if (typeof module === 'object' && module.exports) {
+		// define a CommonJS module that requires 'leaflet'
+		module.exports = factory(require('leaflet'));
+	} else {
+		// Assume 'leaflet' are loaded into global variable already
+		factory(root.L);
+	}
+}(typeof self !== 'undefined'
+	? self
+	: this, (leaflet) => {
+	'use strict';
+
+	if (typeof document === 'undefined') {
+		console.warn('"window.document" is undefined; leaflet.fullscreen requires this object to access the DOM');
+		return false;
+	}
+
+	const nativeAPI = (() => {
+		const methodMap = [
+			// Standard
+			[
+				'requestFullscreen',
+				'exitFullscreen',
+				'fullscreenElement',
+				'fullscreenEnabled',
+				'fullscreenchange',
+				'fullscreenerror'
+			],
+			// New WebKit
+			[
+				'webkitRequestFullscreen',
+				'webkitExitFullscreen',
+				'webkitFullscreenElement',
+				'webkitFullscreenEnabled',
+				'webkitfullscreenchange',
+				'webkitfullscreenerror'
+			]
+		];
+
+		const baseList = methodMap[0];
+		const ret = {};
+
+		for (const methodList of methodMap) {
+			if (methodList[1] in document) {
+				for (let i = 0; i < methodList.length; i++) {
+					ret[baseList[i]] = methodList[i];
+				}
+				return ret;
+			}
+		}
+
+		return false;
+	})();
+
+	const eventNameMap = {
+		change: nativeAPI.fullscreenchange,
+		error: nativeAPI.fullscreenerror,
+	};
+
+	const fullscreenAPI = {
+		request(element, options) {
+			return new Promise((resolve, reject) => {
+				const onFullScreenEntered = function () {
+					this.off('change', onFullScreenEntered);
+					resolve();
+				}.bind(this);
+
+				this.on('change', onFullScreenEntered);
+				element = element || document.documentElement;
+				const returnPromise = element[nativeAPI.requestFullscreen](options);
+				if (returnPromise instanceof Promise) {
+					returnPromise.then(onFullScreenEntered).catch(reject);
+				}
+			});
+		},
+		exit() {
+			return new Promise((resolve, reject) => {
+				if (!this.isFullscreen) {
+					resolve();
+					return;
+				}
+
+				const onFullScreenExit = function () {
+					this.off('change', onFullScreenExit);
+					resolve();
+				}.bind(this);
+
+				this.on('change', onFullScreenExit);
+				const returnPromise = document[nativeAPI.exitFullscreen]();
+				if (returnPromise instanceof Promise) {
+					returnPromise.then(onFullScreenExit).catch(reject);
+				}
+			});
+		},
+		on(event, callback) {
+			const eventName = eventNameMap[event];
+			if (eventName) {
+				document.addEventListener(eventName, callback, false);
+			}
+		},
+		off(event, callback) {
+			const eventName = eventNameMap[event];
+			if (eventName) {
+				document.removeEventListener(eventName, callback, false);
+			}
+		},
+		nativeAPI: nativeAPI
+	};
+
+	Object.defineProperties(fullscreenAPI, {
+		isFullscreen: {
+			get() {
+				return Boolean(document[nativeAPI.fullscreenElement]);
+			}
+		},
+		isEnabled: {
+			enumerable: true,
+			get() {
+				// Coerce to boolean in case of old WebKit
+				return Boolean(document[nativeAPI.fullscreenEnabled]);
+			}
+		}
+	});
+
+	leaflet.Control.FullScreen = leaflet.Control.extend({
+		options: {
+			position: 'topleft',
+			title: 'Full Screen',
+			titleCancel: 'Exit Full Screen',
+			forceSeparateButton: false,
+			forcePseudoFullscreen: false,
+			fullscreenElement: false
+		},
+
+		_screenfull: fullscreenAPI,
+
+		onAdd(map) {
+			let className = 'leaflet-control-zoom-fullscreen';
+			let container;
+			let content = '';
+
+			if (map.zoomControl && !this.options.forceSeparateButton) {
+				container = map.zoomControl._container;
+			} else {
+				container = leaflet.DomUtil.create('div', 'leaflet-bar');
+			}
+
+			if (this.options.content) {
+				content = this.options.content;
+			} else {
+				className += ' fullscreen-icon';
+			}
+
+			this._createButton(this.options.title, className, content, container, this.toggleFullScreen, this);
+			this._map.fullscreenControl = this;
+
+			this._map.on('enterFullscreen exitFullscreen', this._toggleState, this);
+
+			return container;
+		},
+
+		onRemove() {
+			leaflet.DomEvent
+				.off(this.link, 'click', leaflet.DomEvent.stop)
+				.off(this.link, 'click', this.toggleFullScreen, this);
+
+			if (this._screenfull.isEnabled) {
+				leaflet.DomEvent
+					.off(this._container, this._screenfull.nativeAPI.fullscreenchange, leaflet.DomEvent.stop)
+					.off(this._container, this._screenfull.nativeAPI.fullscreenchange, this._handleFullscreenChange, this);
+
+				leaflet.DomEvent
+					.off(document, this._screenfull.nativeAPI.fullscreenchange, leaflet.DomEvent.stop)
+					.off(document, this._screenfull.nativeAPI.fullscreenchange, this._handleFullscreenChange, this);
+			}
+		},
+
+		_createButton(title, className, content, container, fn, context) {
+			this.link = leaflet.DomUtil.create('a', className, container);
+			this.link.href = '#';
+			this.link.title = title;
+			this.link.innerHTML = content;
+
+			this.link.setAttribute('role', 'button');
+			this.link.setAttribute('aria-label', title);
+
+			L.DomEvent.disableClickPropagation(container);
+
+			leaflet.DomEvent
+				.on(this.link, 'click', leaflet.DomEvent.stop)
+				.on(this.link, 'click', fn, context);
+
+			if (this._screenfull.isEnabled) {
+				leaflet.DomEvent
+					.on(container, this._screenfull.nativeAPI.fullscreenchange, leaflet.DomEvent.stop)
+					.on(container, this._screenfull.nativeAPI.fullscreenchange, this._handleFullscreenChange, context);
+
+				leaflet.DomEvent
+					.on(document, this._screenfull.nativeAPI.fullscreenchange, leaflet.DomEvent.stop)
+					.on(document, this._screenfull.nativeAPI.fullscreenchange, this._handleFullscreenChange, context);
+			}
+
+			return this.link;
+		},
+
+		toggleFullScreen() {
+			const map = this._map;
+			map._exitFired = false;
+			if (map._isFullscreen) {
+				if (this._screenfull.isEnabled && !this.options.forcePseudoFullscreen) {
+					this._screenfull.exit();
+				} else {
+					leaflet.DomUtil.removeClass(this.options.fullscreenElement
+						? this.options.fullscreenElement
+						: map._container, 'leaflet-pseudo-fullscreen');
+					map.invalidateSize();
+				}
+				map.fire('exitFullscreen');
+				map._exitFired = true;
+				map._isFullscreen = false;
+			} else {
+				if (this._screenfull.isEnabled && !this.options.forcePseudoFullscreen) {
+					this._screenfull.request(this.options.fullscreenElement
+						? this.options.fullscreenElement
+						: map._container);
+				} else {
+					leaflet.DomUtil.addClass(this.options.fullscreenElement
+						? this.options.fullscreenElement
+						: map._container, 'leaflet-pseudo-fullscreen');
+					map.invalidateSize();
+				}
+				map.fire('enterFullscreen');
+				map._isFullscreen = true;
+			}
+		},
+
+		_toggleState() {
+			this.link.title = this._map._isFullscreen
+				? this.options.title
+				: this.options.titleCancel;
+			this._map._isFullscreen
+				? L.DomUtil.removeClass(this.link, 'leaflet-fullscreen-on')
+				: L.DomUtil.addClass(this.link, 'leaflet-fullscreen-on');
+		},
+
+		_handleFullscreenChange(ev) {
+			const map = this._map;
+			if (ev.target === map.getContainer() && !this._screenfull.isFullscreen && !map._exitFired) {
+				map.invalidateSize();
+				map.fire('exitFullscreen');
+				map._exitFired = true;
+				map._isFullscreen = false;
+			}
+		}
+	});
+
+	leaflet.Map.include({
+		toggleFullscreen() {
+			this.fullscreenControl.toggleFullScreen();
+		}
+	});
+
+	leaflet.Map.addInitHook(function () {
+		if (this.options.fullscreenControl) {
+			this.addControl(leaflet.control.fullscreen(this.options.fullscreenControlOptions));
+		}
+	});
+
+	leaflet.control.fullscreen = function (options) {
+		return new leaflet.Control.FullScreen(options);
+	};
+
+	return { leaflet };
+}));
+    </script>
+  </head>
+
+  <body>
+  <div class="container">
+  <h1>Testversion</h1>
+    <div id="map" style="height:800px"></div>
+
+    <table class="table" id="differential"></table>
+    <div class="row">
+      <div class="col-sm-3">
+        <button class="form-control" id="save-diff">Differenzierung speichern</button>
+      </div>&nbsp;
+      <div class="col-sm-3">
+        <input type="file" class="form-control" id="load-diff-file" />
+      </div>
+      <div class="col-sm-1">
+        <button id="load-diff" class="form-control">laden</button>
+      </div>
+      <div class="col-sm-2">
+        <button class="form-control" id="delete-diff">löschen</button>
+      </div></div>
+   </div>
+    <script>
+      // Global variables, define the image to be opened
+      const url='/microscopy' //without trailing /, url to image server
+      const image_folder='20230405' // folder with image
+      const image = 'HAD_121179806415' //stem of VSI file
+      const stack = '10002' // stack id, Usually 10002 as per Olympus standard.
+      const marker_url = '/viewer/markers' //url to files of marker images, without trailing /
+      // get metadata first, then load image.
+
+     const map = L.map('map',{
+        crs: L.CRS.Simple,
+        maxBoundsViscosity: 1.0,
+      })
+
+      L.control
+	.fullscreen({
+		position: 'topleft', // change the position of the button can be topleft, topright, bottomright or bottomleft, default topleft
+		title: 'Vollbild', // change the title of the button, default Full Screen
+		titleCancel: 'Vollbild verlassen', // change the title of the button when fullscreen is on, default Exit Full Screen
+		content: '[&nbsp;&nbsp;]', // change the content of the button, can be HTML, default null
+		forceSeparateButton: true, // force separate button to detach from zoom buttons, default false
+		forcePseudoFullscreen: true, // force use of pseudo full screen even if full screen API is available, default false
+		fullscreenElement: false // Dom element to render in full screen, false by default, fallback to map._container
+	})
+	.addTo(map);
+
+
+      //initialize map. Need some metadata for this, thus fetch this first.
+      const xhttp = new XMLHttpRequest()
+      xhttp.open('GET',`${url}/${image_folder}/${image}/${stack}`,true);
+      xhttp.send()
+
+      xhttp.onreadystatechange = (evt) => {
+        evt.target
+        if (evt.target.readyState != 4) {
+          return //do nothing if not ready
+        }
+        if (evt.target.status != 200) {
+          alert(`Error while loading tiles: ${this.responseText}`)
+          return
+        }
+        const meta = JSON.parse(evt.target.responseText)
+        map.setMaxBounds([[0,0],[-meta.height,meta.width]])
+
+        var layer = L.tileLayer('{url}/{image_folder}/{image}/{stack}/{z}/{x}/{y}', {
+        url: url,
+        image_folder: image_folder,
+        image: image,
+        stack: stack,
+        minZoom: -meta.levels,
+        maxZoom: 0,
+        detectRetina: true,
+        zoomReverse: true,
+        tileSize: meta.tile,
+        bounds: [[0,0],[-meta.height,meta.width]]
+
+    }).addTo(map);
+        map.setZoom(-meta.levels+1) // zoom out to maximum +1
+        map.panTo([-meta.height/2,meta.width/2])
+        //DEBUG
+        Differential.loadDiff({"folder":"20230405","file":"HAD_121179806415","stack":"10002","cells":[{"type":"a","x":67771,"y":15343},{"type":"a","x":70183,"y":15004},{"type":"a","x":70873,"y":14407},{"type":"a","x":70564,"y":14632},{"type":"a","x":70663,"y":13791},{"type":"a","x":70914,"y":13632},{"type":"a","x":70633,"y":13323},{"type":"a","x":68507,"y":14151},{"type":"a","x":66738,"y":15021},{"type":"a","x":66764,"y":15059},{"type":"a","x":66776,"y":15116},{"type":"a","x":65328,"y":14910},{"type":"a","x":65100,"y":14402},{"type":"a","x":65662,"y":14208},{"type":"a","x":63962,"y":13426},{"type":"a","x":60768,"y":17692},{"type":"a","x":59891,"y":17926},{"type":"a","x":58915,"y":18260},{"type":"a","x":58480,"y":17985},{"type":"a","x":58383,"y":18168},{"type":"a","x":56921,"y":18134},{"type":"a","x":55431,"y":17692},{"type":"a","x":51804,"y":16176},{"type":"a","x":50275,"y":18019},{"type":"a","x":50164,"y":17820},{"type":"a","x":49770,"y":17913},{"type":"a","x":49411,"y":17847},{"type":"a","x":49225,"y":18783},{"type":"a","x":48438,"y":19670},{"type":"a","x":48374,"y":19683},{"type":"a","x":48049,"y":19900},{"type":"a","x":47763,"y":19759},{"type":"a","x":46767,"y":20708},{"type":"a","x":45394,"y":20925},{"type":"a","x":45402,"y":20863},{"type":"a","x":43884,"y":20144},{"type":"a","x":40696,"y":21309},{"type":"a","x":40695,"y":21402},{"type":"a","x":40827,"y":21907},{"type":"a","x":38115,"y":20879},{"type":"a","x":40277,"y":11075},{"type":"a","x":40213,"y":9510},{"type":"a","x":40776,"y":8087},{"type":"a","x":39978,"y":7057},{"type":"a","x":40033,"y":7095},{"type":"a","x":39805,"y":6997},{"type":"a","x":39712,"y":6968},{"type":"a","x":44643,"y":6108},{"type":"a","x":44929,"y":6039},{"type":"a","x":44514,"y":6546},{"type":"a","x":45580,"y":7397},{"type":"a","x":45667,"y":7228},{"type":"a","x":45767,"y":7054},{"type":"a","x":47562,"y":6671},{"type":"a","x":47610,"y":6687},{"type":"a","x":48402,"y":6559},{"type":"a","x":49156,"y":6064},{"type":"a","x":50624,"y":6466},{"type":"a","x":51456,"y":5792},{"type":"a","x":51902,"y":4438},{"type":"a","x":89029,"y":8732},{"type":"a","x":88680,"y":8776},{"type":"a","x":88044,"y":8409},{"type":"a","x":87984,"y":8374},{"type":"a","x":87326,"y":9962},{"type":"a","x":86750,"y":10801},{"type":"a","x":87170,"y":11003},{"type":"a","x":85685,"y":11404},{"type":"a","x":84642,"y":9190},{"type":"a","x":83048,"y":4284},{"type":"a","x":79058,"y":4028},{"type":"a","x":66102,"y":4044},{"type":"q","x":68646,"y":15328},{"type":"q","x":70496,"y":13341},{"type":"q","x":40683,"y":19569},{"type":"q","x":84685,"y":10735},{"type":"x","x":56404,"y":17717},{"type":"x","x":51459,"y":16253},{"type":"b","x":64012,"y":13071},{"type":"b","x":52885,"y":15970},{"type":"b","x":88262,"y":9884},{"type":"f","x":84229,"y":8713},{"type":"y","x":68734,"y":15302},{"type":"y","x":70506,"y":15284},{"type":"y","x":70503,"y":15121},{"type":"y","x":70886,"y":13243},{"type":"y","x":68020,"y":14323},{"type":"y","x":67106,"y":15081},{"type":"y","x":66924,"y":15162},{"type":"y","x":67023,"y":14988},{"type":"y","x":65515,"y":14909},{"type":"y","x":65727,"y":15089},{"type":"y","x":64567,"y":13554},{"type":"y","x":64143,"y":13624},{"type":"y","x":64127,"y":13721},{"type":"y","x":64016,"y":13573},{"type":"y","x":64450,"y":13106},{"type":"y","x":60615,"y":18025},{"type":"y","x":57474,"y":18552},{"type":"y","x":56456,"y":18545},{"type":"y","x":56252,"y":17512},{"type":"y","x":54553,"y":17610},{"type":"y","x":55215,"y":17234},{"type":"y","x":54327,"y":16507},{"type":"y","x":53852,"y":16147},{"type":"y","x":53436,"y":16224},{"type":"y","x":51810,"y":16448},{"type":"y","x":51137,"y":16384},{"type":"y","x":50409,"y":16697},{"type":"y","x":50325,"y":16622},{"type":"y","x":50242,"y":17048},{"type":"y","x":49346,"y":17814},{"type":"y","x":49370,"y":17776},{"type":"y","x":49606,"y":17752},{"type":"y","x":49897,"y":17827},{"type":"y","x":48278,"y":19834},{"type":"y","x":48211,"y":19762},{"type":"y","x":45675,"y":21760},{"type":"y","x":45133,"y":20322},{"type":"y","x":45232,"y":20414},{"type":"y","x":43981,"y":19996},{"type":"y","x":44096,"y":19832},{"type":"y","x":43548,"y":19481},{"type":"y","x":40928,"y":20038},{"type":"y","x":40875,"y":19834},{"type":"y","x":40565,"y":20854},{"type":"y","x":38016,"y":19295},{"type":"y","x":37449,"y":19529},{"type":"y","x":37379,"y":19556},{"type":"y","x":38340,"y":19293},{"type":"y","x":39975,"y":10862},{"type":"y","x":39858,"y":10956},{"type":"y","x":40574,"y":9342},{"type":"y","x":40069,"y":8597},{"type":"y","x":45045,"y":6692},{"type":"y","x":44673,"y":6690},{"type":"y","x":45536,"y":7201},{"type":"y","x":46239,"y":7113},{"type":"y","x":50522,"y":6072},{"type":"y","x":51583,"y":6029},{"type":"y","x":51733,"y":5661},{"type":"y","x":51195,"y":5399},{"type":"y","x":85627,"y":11392},{"type":"y","x":85324,"y":9112},{"type":"y","x":85826,"y":9176},{"type":"y","x":84474,"y":9224},{"type":"y","x":84368,"y":9100},{"type":"y","x":82020,"y":3384},{"type":"y","x":78296,"y":3760},{"type":"y","x":78108,"y":3803},{"type":"y","x":71062,"y":2000},{"type":"y","x":71426,"y":1670},{"type":"y","x":71526,"y":1676},{"type":"y","x":72206,"y":1794},{"type":"y","x":72976,"y":2256},{"type":"y","x":72964,"y":2362},{"type":"y","x":68874,"y":1484},{"type":"y","x":68322,"y":1376},{"type":"y","x":67342,"y":3442},{"type":"y","x":67426,"y":3566},{"type":"y","x":64713,"y":2998},{"type":"y","x":63622,"y":3284},{"type":"y","x":62978,"y":4514},{"type":"y","x":62776,"y":4568},{"type":"y","x":63306,"y":4768},{"type":"y","x":64216,"y":4224},{"type":"y","x":64280,"y":4862},{"type":"y","x":64650,"y":6098},{"type":"y","x":63666,"y":6540},{"type":"y","x":63942,"y":6224},{"type":"z","x":48137,"y":6790},{"type":"z","x":81948,"y":5840},{"type":" ","x":69695,"y":14822},{"type":" ","x":69856,"y":14806},{"type":" ","x":69894,"y":12551},{"type":" ","x":70373,"y":12610},{"type":" ","x":69403,"y":12606},{"type":" ","x":69070,"y":14208},{"type":" ","x":68979,"y":14387},{"type":" ","x":68753,"y":14623},{"type":" ","x":67113,"y":14937},{"type":" ","x":66007,"y":14954},{"type":" ","x":65948,"y":14644},{"type":" ","x":66300,"y":14669},{"type":" ","x":64957,"y":14518},{"type":" ","x":61601,"y":17856},{"type":" ","x":59434,"y":18124},{"type":" ","x":58658,"y":18082},{"type":" ","x":56833,"y":18127},{"type":" ","x":56082,"y":18021},{"type":" ","x":55974,"y":18020},{"type":" ","x":55155,"y":18328},{"type":" ","x":54792,"y":18302},{"type":" ","x":54665,"y":18446},{"type":" ","x":54978,"y":16433},{"type":" ","x":52156,"y":15912},{"type":" ","x":51523,"y":16497},{"type":" ","x":51694,"y":16498},{"type":" ","x":51307,"y":16375},{"type":" ","x":51084,"y":16643},{"type":" ","x":50301,"y":17859},{"type":" ","x":49016,"y":18662},{"type":" ","x":49318,"y":18836},{"type":" ","x":47553,"y":19719},{"type":" ","x":47424,"y":19713},{"type":" ","x":44822,"y":20803},{"type":" ","x":41530,"y":19192},{"type":" ","x":41208,"y":20127},{"type":" ","x":39738,"y":21621},{"type":" ","x":39953,"y":21520},{"type":" ","x":40039,"y":21566},{"type":" ","x":39395,"y":21445},{"type":" ","x":38936,"y":21511},{"type":" ","x":39146,"y":21183},{"type":" ","x":38433,"y":20753},{"type":" ","x":38122,"y":20795},{"type":" ","x":38172,"y":20958},{"type":" ","x":37886,"y":20400},{"type":" ","x":40263,"y":8976},{"type":" ","x":39785,"y":8938},{"type":" ","x":39857,"y":7053},{"type":" ","x":40235,"y":6803},{"type":" ","x":39889,"y":6548},{"type":" ","x":40326,"y":6471},{"type":" ","x":40489,"y":5141},{"type":" ","x":41923,"y":4848},{"type":" ","x":43354,"y":5092},{"type":" ","x":45161,"y":5956},{"type":" ","x":45128,"y":6017},{"type":" ","x":45331,"y":6185},{"type":" ","x":45408,"y":5958},{"type":" ","x":46505,"y":6898},{"type":" ","x":46387,"y":7048},{"type":" ","x":46414,"y":7015},{"type":" ","x":46054,"y":7046},{"type":" ","x":45995,"y":7071},{"type":" ","x":46054,"y":7117},{"type":" ","x":45855,"y":7066},{"type":" ","x":46671,"y":6917},{"type":" ","x":47130,"y":7187},{"type":" ","x":47145,"y":6872},{"type":" ","x":47204,"y":6760},{"type":" ","x":49646,"y":5800},{"type":" ","x":50537,"y":6365},{"type":" ","x":50386,"y":6123},{"type":" ","x":50795,"y":5970},{"type":" ","x":50858,"y":5941},{"type":" ","x":51668,"y":6005},{"type":" ","x":51799,"y":6038},{"type":" ","x":51890,"y":5248},{"type":" ","x":52140,"y":5270},{"type":" ","x":51256,"y":4714},{"type":" ","x":51217,"y":4861},{"type":" ","x":50815,"y":4907},{"type":" ","x":51054,"y":4544},{"type":" ","x":52113,"y":4234},{"type":" ","x":52165,"y":4258},{"type":" ","x":51659,"y":4036},{"type":" ","x":51592,"y":3910},{"type":" ","x":52057,"y":3863},{"type":" ","x":52307,"y":4584},{"type":" ","x":88816,"y":8777},{"type":" ","x":89143,"y":8599},{"type":" ","x":89270,"y":8789},{"type":" ","x":87936,"y":10627},{"type":" ","x":87962,"y":10679},{"type":" ","x":88274,"y":10409},{"type":" ","x":88086,"y":10304},{"type":" ","x":86605,"y":10810},{"type":" ","x":85029,"y":11286},{"type":" ","x":84910,"y":10767},{"type":" ","x":85376,"y":10473},{"type":" ","x":85393,"y":10251},{"type":" ","x":85203,"y":10154},{"type":" ","x":84033,"y":8323},{"type":" ","x":83907,"y":8721},{"type":" ","x":85273,"y":7363},{"type":" ","x":85657,"y":7217},{"type":" ","x":83168,"y":4296},{"type":" ","x":78416,"y":3289},{"type":" ","x":79136,"y":4072},{"type":" ","x":79012,"y":3960},{"type":" ","x":77348,"y":4666},{"type":" ","x":65776,"y":3548},{"type":" ","x":65148,"y":3620},{"type":" ","x":65180,"y":3358},{"type":" ","x":65036,"y":2892},{"type":" ","x":64082,"y":2762},{"type":" ","x":64598,"y":6152}]})
+      };
+
+      /* EXTERNALIZE THIS CODE ONCE FINISHED */
+      class CellType {
+
+        static types = {}
+        static current_cell_type = ''
+        static cell_count = 0
+        //return current cell type
+        static current() {
+          if (this.current_cell_type in this.types) {
+            return this.types[this.current_cell_type]
+          }
+          return null
+        }
+
+        static updateDiff() {
+            this.all_cell_count = 0
+            this.cell_count = 0
+            for (const [key, type] of Object.entries(CellType.types)) {
+              if (type.part_of_diff)
+                this.cell_count += type.count
+              this.all_cell_count+=type.count
+            }
+            this.countField.text(`${this.cell_count} (total ${this.all_cell_count})`)
+            for (const [key, type] of Object.entries(CellType.types)) {
+              type.updateDiff()
+            }
+        }
+
+        static diffRow() {
+          let row = $('<tr>')
+          this.countField = $('<td colspan="2">')
+          let turboField = $('<td colspan="2">Turbo Modus&nbsp;</td>').append($('<input type="checkbox" />').change((e)=>{
+            Differential.turboMode = e.target.checked
+          }))
+          row.append($(`<td colspan="3">Total Zellen</td>`)).append(this.countField).append(turboField)
+          return row
+        }
+        constructor(key, icon, description, part_of_diff = true, dimension=128) {
+          this.key = key
+          this.img_src = `${marker_url}/${icon}`
+          this.description = description
+          this.part_of_diff = part_of_diff
+          this.count = 0
+          this.dysplasia_count = 0
+          this.cells = {}
+          this._intCellCounter = 0
+          this.icon = L.icon({
+            iconUrl: this.img_src,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
+            popupAnchor: [30, 30]
+          })
+          CellType.types[this.key] = this
+          this.height = dimension
+          this.width = dimension
+        }
+
+        proportion() {
+          if (!this.part_of_diff) return '-'
+          if (CellType.cell_count < 20) return '-- %'
+          return `${(100 * this.count / CellType.cell_count).toFixed(1)} %`
+        }
+        diffRow() {
+          let row = $('<tr>')
+          let key = $(`<td>${this.key}</td>`)
+          if (this.key == ' ') {
+            key = $(`<td>[Space]</td>`)
+          }
+          let img = $(`<td>${this.image()}</td>`)
+          let description = $(`<td>${this.description}</td>`)
+          let cellImgTd = $('<td style="word-break: break-all">')
+          this.cellImgContainer = $('<div class="cell-image-container">')
+          this.cellImgContainer.on('dragover',(e) => {
+            if (Cell.draggedCell.type == this) return; // dont allow drag and drop on same class
+            this.cellImgContainer.addClass('container-active');
+            e.preventDefault();})
+          this.cellImgContainer.on('dragleave',(e) => {
+            if (Cell.draggedCell.type == this) return; //dont allow drag and drop on same class
+            this.cellImgContainer.removeClass('container-active');
+            e.preventDefault();
+            CellType.activeDragType = null})
+          this.cellImgContainer.on('drop', (e) => {
+            if (Cell.draggedCell.type == this) return; //dont allow drag and drop on same class
+            this.cellImgContainer.removeClass('container-active'); e.preventDefault();
+            Cell.draggedCell.type.count -= 1
+            Cell.draggedCell.type = this
+            this.count ++
+            Cell.draggedCell.marker.icon = this.icon
+            Cell.draggedCell.image.remove()
+            this.cellImgContainer.append(Cell.draggedCell.image)
+            CellType.updateDiff()
+          })
+          cellImgTd.append(this.cellImgContainer)
+          this.countField = $(`<td></td>`)
+          this.proportionField = $(`<td></td>`)
+          this.part_of_diff_field = $('<input type="checkbox">')
+          this.part_of_diff_field.change((e) => {
+              this.part_of_diff = e.target.checked
+              CellType.updateDiff()
+          })
+          let pod = $('<td></td>').append(this.part_of_diff_field)
+          this.part_of_diff_field.prop('checked', this.part_of_diff)
+          row.append(key).append(img).append(description).append(this.countField).append(this.proportionField).append(pod).append(cellImgTd)
+          return row
+
+        }
+        updateDiff() {
+          this.countField.text(`${this.count}`)
+          this.proportionField.text(this.proportion())
+        }
+        //attribution line for this cell type
+
+        image() {
+          return `<img src="${this.img_src}" width="36px" height="36px" alt="${this.description}"/>`
+        }
+
+        attribution() {
+          return `${this.image()}`
+        }
+
+        addCell(cell) {
+          this.count++
+          cell.cell_id = this._intCellCounter
+          this._intCellCounter ++
+          cell.addImg(this.cellImgContainer)
+          this.cells[cell.cell_id] = cell
+          CellType.updateDiff()
+        }
+
+        removeCell(cell) {
+          this.count --
+          cell.removeImg()
+          delete this.cells[cell.cell_id]
+        }
+      }
+
+      // Define cell types
+      new CellType('t', 'pro_ery.svg', 'Proerythroblasten', dimension=180)
+      new CellType('r', 'baso_ery.svg', 'Basophile Erythroblasten', dimension=120)
+      new CellType('e', 'poly_ery.svg', 'Polychromatische Erythroblasten', dimension=80)
+      new CellType('w', 'oxy_ery.svg', 'Oxyphile Erythroblasten', dimension=80)
+      new CellType('a', 'lymph.svg', 'Lymphozyten', dimension=100)
+      new CellType('q', 'plasma.svg', 'Plasmazellen', dimension=180)
+      new CellType('x', 'mono.svg', 'Monozyten', dimension=180)
+      new CellType('b', 'bla.svg', 'Myeloblasten', dimension=180)
+      new CellType('v', 'prom.svg', 'Promyelozyten', dimension=180)
+      new CellType('s', 'myelo.svg', 'Myelozyten', dimension=180)
+      new CellType('c', 'eo.svg', 'Eosinophile Granulozyten', dimension=180)
+      new CellType('g', 'meta.svg', 'Metamyelozyten', dimension=180)
+      new CellType('f', 'sta.svg', 'Stabkernige neutrophile Granulozyten', dimension=180)
+      new CellType('d', 'seg.svg', 'Segmentkernige neutrophile Granulozyten', dimension=180)
+      new CellType('h', 'baso.svg', 'Basophile Granulozyten', dimension=180)
+      new CellType('y', 'other.svg', 'Andere Zellen', part_of_diff=false, dimension=180)
+      new CellType('z', 'mega.svg', 'Megakaryozyten', part_of_diff=false, dimension=512)
+      new CellType('n', 'mast.svg', 'Mastzellen', part_of_diff=false, dimension=180)
+      new CellType('m', 'phage.svg', 'Makrophagen', part_of_diff=false, dimension=180)
+      new CellType(' ', 'laed.svg', 'L&auml;dierte Zellen', part_of_diff=false, dimension=180)
+
+
+      var legend = L.control({ position: "bottomleft"});
+      legend.onAdd = function(map) {
+        var div = L.DomUtil.create("div", "legend");
+        div.innerHTML += "<h4>Legende</h4>";
+        for (const [key, type] of Object.entries(CellType.types)) {
+          let key = type.key;
+          if (key == ' ')
+            key = 'Space'
+          div.innerHTML += `<i class="icon" style="background-image: url(${type.img_src});background-repeat: no-repeat;"></i><span>[${key}] ${type.description}</span><br />`
+        }
+        L.DomEvent.on(div, 'click', (e) => {e.target.remove()})
+        return div;
+      };
+      legend.addTo(map)
+
+      class Cell {
+        static draggedCell = null
+        constructor(type, position, map) {
+          this.position = position
+          this.type = type
+          this.type.addCell(this)
+          this.marker = L.marker(position, {
+            icon: this.type.icon
+          }).addTo(map)
+          this.marker.cell = this
+          this.marker.on('click', (e) => {
+            e.target.cell.type.removeCell(e.target.cell)
+            e.target.remove()
+          })
+        }
+        getImage() {
+          this.image = $(`<img draggable="true" src="${url}/${image_folder}/${image}/${stack}/cell/${Math.floor(this.position.lng)}/${Math.floor(-this.position.lat)}/${this.type.width}/${this.type.height}" class="cell-image" />`).on('click',() => {
+            map.flyTo(this.position, 0)
+          })
+          let position = this.position
+          this.image.on('dragstart',(e) => {
+            Cell.draggedCell = this
+          })
+          //let type = this.type
+          this.image.popover({
+            container: 'body',
+            trigger: 'hover',
+            content: () => {return `<img class="cell-popover-image" src="${url}/${image_folder}/${image}/${stack}/cell/${Math.floor(position.lng)}/${Math.floor(-position.lat)}/${this.type.width}/${this.type.height}" />`},
+            placement: 'top',
+            html: true
+          })
+        }
+        addImg(to) {
+          this.getImage()
+          to.append(this.image)
+        }
+
+        removeImg() {
+          this.image.remove()
+        }
+
+        json() {
+          return {
+            'type': this.type.key,
+            'dysplastic': this.type.dysplastic,
+            'x': Math.floor(this.position.lng),
+            'y': Math.floor(-this.position.lat)
+          }
+        }
+      }
+
+      class Differential {
+        static turboMode = false
+
+        constructor(table) {
+          this.table = table
+          this.table.append($('<tr><th>Taste</th><th>Symbol</th><th>Zelltyp</th><th>Anzahl</th><th>Anteil</th><th>Teil der Differenzierung</th></tr>'))
+          for (const [key, type] of Object.entries(CellType.types)) {
+            this.table.append(type.diffRow())
+          }
+          this.table.append(CellType.diffRow())
+          CellType.updateDiff()
+        }
+
+        static save() {
+          let cells = []
+          for (const [key, type] of Object.entries(CellType.types))
+            for (const [idx, cell] of Object.entries(type.cells))
+              cells.push(cell.json())
+          let returnObject = {
+            'folder': image_folder,
+            'file': image,
+            'stack': stack,
+            'cells': cells
+          }
+          returnObject = JSON.stringify(returnObject)
+          var a = document.createElement('a');
+          document.body.appendChild(a);
+          var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(returnObject);
+          a.setAttribute("href", dataStr);
+          a.setAttribute("download", `diff_${image_folder}_${image}_${stack}.diff`);
+          a.click();
+          a.remove()
+        }
+
+        static loadDiff(diff) {
+          if (diff.file != image || diff.stack != stack || diff.folder != image_folder) {
+              alert("Diese Differenzierung gehört nicht zu dieser Datei.")
+              return
+            }
+            for (const [key, type] of Object.entries(CellType.types)) {
+              for (const [idx, cell] of Object.entries(type.cells)) {
+                type.removeCell(cell)
+                cell.marker.remove()
+              }
+            }
+            diff.cells.forEach((cell, idx) => {
+              let type = CellType.types[cell.type]
+              let latlng = L.latLng(-cell.y,cell.x)
+              new Cell(type, latlng, map)
+            })
+            CellType.updateDiff()
+        }
+      }
+      map.on('click',(e) => {
+        type = CellType.current()
+        if (type) {
+          new Cell(type, e.latlng, e.target)
+        }})
+      map.mouse_position = null
+      map.on('mouseout',()=>{map.mouse_position = null})
+      map.on('mousemove',(e)=>{map.mouse_position=e.latlng})
+      document.onkeydown = (e) => {
+        CellType.current_cell_type = e.key
+        type = CellType.current()
+        if (type) {
+          map.attributionControl.setPrefix(type.attribution())
+          e.preventDefault()
+          if (map.mouse_position && Differential.turboMode)    {
+            new Cell(type, map.mouse_position, map)
+          }
+        } else {
+          map.attributionControl.setPrefix("")
+        }
+
+      }
+      new Differential($('#differential'))
+      $('#save-diff').on('click', () => {Differential.save()})
+      $('#delete-diff').on('click', () => {
+        if (confirm('Wollen Sie wirklich die Differenzierung löschen?')) {
+          for (const [key, type] of Object.entries(CellType.types)) {
+            for (const [idx, cell] of Object.entries(type.cells)) {
+              type.removeCell(cell)
+              cell.marker.remove()
+            }
+          }
+          CellType.updateDiff()
+        }
+      })
+
+      $('#load-diff').on('click', () => {
+        let files = $('#load-diff-file')[0].files;
+        if (files.length) {
+          let fr = new FileReader()
+          fr.onload = (e) => {
+            let diff = JSON.parse(e.target.result)
+            Differential.loadDiff(diff)
+          }
+          fr.readAsText(files.item(0));
+        } else {
+          alert('Bitte wählen Sie eine Datei aus.')
+        }
+      })
+
+
+    </script>
+  </body>
+</html>
+  
+  

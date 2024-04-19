@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 36 36">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #8c3293;
+      }
+
+      .cls-1, .cls-2 {
+        stroke-width: 0px;
+      }
+
+      .cls-2 {
+        fill: #ee4599;
+      }
+
+      .cls-3 {
+        fill: #789fd3;
+        filter: url(#outer-glow-1);
+        stroke: #231f20;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-4 {
+        fill: #fff;
+        font-family: ArialMT, Arial;
+        font-size: 18.73px;
+      }
+    </style>
+    <filter id="outer-glow-1" filterUnits="userSpaceOnUse">
+      <feOffset dx="0" dy="0"/>
+      <feGaussianBlur result="blur" stdDeviation="5"/>
+      <feFlood flood-color="#fff" flood-opacity=".75"/>
+      <feComposite in2="blur" operator="in"/>
+      <feComposite in="SourceGraphic"/>
+    </filter>
+  </defs>
+  <circle class="cls-3" cx="18" cy="18" r="15.29"/>
+  <ellipse class="cls-1" cx="15.65" cy="19.82" rx="10.82" ry="13.67" transform="translate(-8.38 12.07) rotate(-33.83)"/>
+  <circle class="cls-2" cx="15.25" cy="5.72" r=".4"/>
+  <circle class="cls-2" cx="18.75" cy="5.62" r=".5"/>
+  <circle class="cls-2" cx="23.86" cy="6.7" r=".59"/>
+  <circle class="cls-2" cx="23.03" cy="9.1" r=".51"/>
+  <circle class="cls-2" cx="24.45" cy="11.68" r=".51"/>
+  <circle class="cls-2" cx="27.3" cy="13.89" r=".51"/>
+  <circle class="cls-2" cx="29.32" cy="14.9" r=".51"/>
+  <circle class="cls-2" cx="29.54" cy="19.31" r=".51"/>
+  <circle class="cls-2" cx="31.09" cy="20.33" r=".51"/>
+  <circle class="cls-2" cx="27.69" cy="9.99" r=".39"/>
+  <circle class="cls-2" cx="29.32" cy="11.44" r=".48"/>
+  <circle class="cls-2" cx="25.61" cy="9.53" r=".43"/>
+  <text class="cls-4" transform="translate(7.05 25.83)"><tspan x="0" y="0">M</tspan></text>
+</svg>

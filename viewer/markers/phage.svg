@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 36 36">
+  <defs>
+    <style>
+      .cls-1 {
+        font-family: ArialMT, Arial;
+      }
+
+      .cls-2 {
+        fill: #8e50a0;
+      }
+
+      .cls-2, .cls-3 {
+        stroke-width: 0px;
+      }
+
+      .cls-4 {
+        fill: #0a0e17;
+        font-size: 18.7px;
+      }
+
+      .cls-4, .cls-5 {
+        isolation: isolate;
+      }
+
+      .cls-6 {
+        fill: #c2def4;
+        stroke: #231f20;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-7 {
+        font-family: Symbol, Symbol;
+      }
+
+      .cls-3 {
+        fill: #2c2e84;
+      }
+    </style>
+  </defs>
+  <circle class="cls-6" cx="18" cy="18" r="15.3"/>
+  <circle class="cls-2" cx="18" cy="18" r="8.4"/>
+  <circle class="cls-3" cx="12.9" cy="8" r="1.1"/>
+  <circle class="cls-3" cx="21.8" cy="6.9" r="2.3"/>
+  <circle class="cls-3" cx="29.5" cy="18.7" r="2"/>
+  <circle class="cls-3" cx="21.7" cy="28.8" r="1.7"/>
+  <circle class="cls-3" cx="6.1" cy="19.7" r="1.7"/>
+  <g class="cls-5">
+    <text class="cls-4" transform="translate(6.1 23.8)"><tspan class="cls-1" x="0" y="0">M</tspan><tspan class="cls-7" x="15.6" y="0">f</tspan></text>
+  </g>
+</svg>

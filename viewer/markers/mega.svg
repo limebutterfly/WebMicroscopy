@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" viewBox="0 0 36 36">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #d8add0;
+        filter: url(#outer-glow-1);
+        stroke: #231f20;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-2 {
+        fill: #703f98;
+        stroke-width: 0px;
+      }
+
+      .cls-3 {
+        fill: #fff;
+        font-family: ArialMT, Arial;
+        font-size: 18.8px;
+      }
+    </style>
+    <filter id="outer-glow-1" filterUnits="userSpaceOnUse">
+      <feOffset dx="0" dy="0"/>
+      <feGaussianBlur result="blur" stdDeviation="5"/>
+      <feFlood flood-color="#fff" flood-opacity=".75"/>
+      <feComposite in2="blur" operator="in"/>
+      <feComposite in="SourceGraphic"/>
+    </filter>
+  </defs>
+  <circle class="cls-1" cx="18" cy="18" r="15.29"/>
+  <ellipse class="cls-2" cx="11.13" cy="16.32" rx="6.87" ry="6.47"/>
+  <ellipse class="cls-2" cx="12.77" cy="23.12" rx="6.87" ry="6.47"/>
+  <ellipse class="cls-2" cx="22.51" cy="21.34" rx="6.87" ry="6.47"/>
+  <ellipse class="cls-2" cx="19.23" cy="25.82" rx="6.87" ry="6.47"/>
+  <text class="cls-3" transform="translate(5.71 23.77)"><tspan x="0" y="0">Me</tspan></text>
+</svg>
